@@ -4,37 +4,27 @@ import abc
 
 @ops.custom_gradient
 def flip_gradient(weight):
-    """
-    An identity function that flips the sign of the gradient during
-    the backward pass. This is used to perform gradient ascent using a
-    standard gradient descent optimizer.
-    """
     def grad(*args, upstream=None):
         if upstream is None:
             (upstream,) = args
         return -upstream
     return weight, grad
 
-
+# Abstract base class for constraints
 @keras.utils.register_keras_serializable(name = "Constraint")
 class Contraint(keras.layers.Layer):
-    """
-    Abstract base class for a constraint.
-    Each constraint has its own Lagrange multiplier (lmbda) and calculates
-    its own penalty, which it adds to the total model loss.
-    """
     def __init__(self, scale=1.0, damping=1.0, **kwargs):
         super().__init__(**kwargs)
         self.scale = self.add_weight(
             name='scale',
             shape=(),
-            initializer=lambda shape, dtype: ops.convert_to_tensor(scale, dtype=dtype),
+            initializer=lambda s, d: ops.convert_to_tensor(scale, dtype=d),
             trainable=False
         )
         self.damping = self.add_weight(
             name='damping',
             shape=(),
-            initializer=lambda shape, dtype: ops.convert_to_tensor(damping, dtype=dtype),
+            initializer=lambda s, d: ops.convert_to_tensor(damping, dtype=d),
             trainable=False
         )
         self.lmbda = self.add_weight(
@@ -44,31 +34,111 @@ class Contraint(keras.layers.Layer):
             trainable=True
         )
     
-    def call(self, inputs):
-        fn_value = self.ctr_fn(inputs)
-        infeasibility = self.ctr_infeasibility(fn_value)
-        l_term = ops.maximum(self.lmbda, 0.0) * infeasibility
+    def call(self, weight):
+        """Calculates the penalty from a given infeasibility measure."""
+        raw_infeasibility = self.get_infeasibility(weight)
+        infeasibility = self.pipe_infeasibility(raw_infeasibility)
+        
+        ascent_lmbda = flip_gradient(self.lmbda)
+        
+        l_term = ascent_lmbda * infeasibility
         damp_term = self.damping * ops.square(infeasibility) / 2
-        additional_loss = self.scale * (l_term + damp_term)
-        return additional_loss
-    
+        penalty = self.scale * (l_term + damp_term)
+        
+        self.add_loss(penalty)
+
     @abc.abstractmethod
-    def ctr_fn(self, inputs):
-        """This function should be implemented by subclasses to compute the constraint function."""
-        raise NotImplementedError("Subclasses should implement ctr_fn() method")
+    def get_infeasibility(self, weight):
+        """Must be implemented by subclasses to define the violation."""
+        raise NotImplementedError
     
-    @abc.abstractmethod
-    def ctr_infeasibility(self, ctr_fn):
-        """This function should be implemented by subclasses to compute the constraint infeasibility."""
-        raise NotImplementedError("Subclasses should implement ctr_infeasibility() method")
+    def pipe_infeasibility(self, infeasibility):
+        """Optional transformation of raw infeasibility.
+        Default is identity. Subclasses may override."""
+        return infeasibility
+
+
+# Generic Contraint Classes
+@keras.utils.register_keras_serializable(name = "EqualityConstraint")
+class EqualityConstraint(Contraint):
+    """Contraint for g(w) == target_value."""
+    def __init__(self, metric_fn, target_value = 0.0,**kwargs):
+        super().__init__(**kwargs)
+        self.metric_fn = metric_fn
+        self.target_value = target_value
+        
+    def get_infeasibility(self, weight):
+        metric_value = self.metric_fn(weight)
+        infeasibility = metric_value - self.target_value
+        return ops.abs(infeasibility)
+    
+    
+@keras.utils.register_keras_serializable(name = "LessThanOrEqualConstraint")
+class LessThanOrEqualConstraint(Contraint):
+    """Contraint for g(w) <= target_value."""
+    def __init__(self, metric_fn, target_value = 0.0, **kwargs):
+        super().__init__(**kwargs)
+        self.metric_fn = metric_fn
+        self.target_value = target_value
+        
+    def get_infeasibility(self, weight):
+        metric_value = self.metric_fn(weight)
+        infeasibility = metric_value - self.target_value
+        return ops.maximum(infeasibility, 0.0)
+    
+@keras.utils.register_keras_serializable(name = "GreaterThanOrEqualConstraint")
+class GreaterThanOrEqualConstraint(Contraint):
+    """Contraint for g(w) >= target_value."""
+    def __init__(self, metric_fn, target_value = 0.0, **kwargs):
+        super().__init__(**kwargs)
+        self.metric_fn = metric_fn
+        self.target_value = target_value
+        
+    def get_infeasibility(self, weight):
+        metric_value = self.metric_fn(weight)
+        infeasibility = self.target_value - metric_value
+        return ops.maximum(infeasibility, 0.0)
+    
+#-------------------------------------------------------------------
+#                   Metric Functions
+#-------------------------------------------------------------------
+
+class UnstructuredSparsityMetric:
+    """Calculates the ratio of non-zero weights in a tensor."""
+    def __init__(self, epsilon=1e-3):
+        self.epsilon = epsilon
+    def __call__(self, weight):
+        num_weights = ops.cast(ops.size(weight), weight.dtype)
+        zero_weights = ops.less_equal(ops.abs(weight), self.epsilon)
+        zero_count = ops.reduce_sum(ops.cast(zero_weights, weight.dtype))
+        sparsity_ratio = zero_count / num_weights
+        return sparsity_ratio
+
+class StructuredSparsityMetric:
+    
     
 @keras.utils.register_keras_serializable(name = "EqL1Constraint")
-class EqL1Constraint(Contraint):
+class SparseConstraint_EqL1(Contraint):
     def __init__(self, layer, target_val, epsilon=1e-3, scale=1.0, damping=1.0, **kwargs):    
         super().__init__(scale=scale, damping=damping, **kwargs)
         self.layer = layer
         self.target_val = target_val
         self.epsilon = epsilon
+        
+    def ctr_fn(self,weight):
+        num_weights = ops.cast(ops.size(weight), weight.dtype)
+        zero_weights = ops.less_equal(ops.abs(weight), self.epsilon)
+        zero_count = ops.reduce_sum(ops.cast(zero_weights, weight.dtype))
+        l1_term = ops.reduce_mean(ops.abs(weight))
+        
+        target_zero_count = ops.math.ceil(num_weights * self.target_val)
+        factor = (target_zero_count - zero_count) / num_weights
+        fn_value = ops.maximum(factor, 0.0) * l1_term
+        return fn_value
+    def ctr_infeasibility(self, fn_value):
+        return ops.abs(fn_value)
+    
+    
         
 
 
