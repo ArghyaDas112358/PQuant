@@ -2,34 +2,53 @@ import keras
 from keras import ops
 import abc
 
+@ops.custom_gradient
+def flip_gradient(weight):
+    """
+    An identity function that flips the sign of the gradient during
+    the backward pass. This is used to perform gradient ascent using a
+    standard gradient descent optimizer.
+    """
+    def grad(*args, upstream=None):
+        if upstream is None:
+            (upstream,) = args
+        return -upstream
+    return weight, grad
+
+
 @keras.utils.register_keras_serializable(name = "Constraint")
 class Contraint(keras.layers.Layer):
+    """
+    Abstract base class for a constraint.
+    Each constraint has its own Lagrange multiplier (lmbda) and calculates
+    its own penalty, which it adds to the total model loss.
+    """
     def __init__(self, scale=1.0, damping=1.0, **kwargs):
         super().__init__(**kwargs)
         self.scale = self.add_weight(
             name='scale',
             shape=(),
-            initializer=keras.initializers.Constant(scale),
+            initializer=lambda shape, dtype: ops.convert_to_tensor(scale, dtype=dtype),
             trainable=False
         )
         self.damping = self.add_weight(
             name='damping',
             shape=(),
-            initializer=keras.initializers.Constant(scale),
+            initializer=lambda shape, dtype: ops.convert_to_tensor(damping, dtype=dtype),
             trainable=False
         )
         self.lmbda = self.add_weight(
             name=self.name + '_lmbda',
             shape=(),
-            initializer=keras.initializers.Constant(scale),
+            initializer=keras.initializers.Zeros(),
             trainable=True
         )
     
     def call(self, inputs):
-        _ctr_fn = self.ctr_fn(inputs)
-        _ctr_infs = self.ctr_infeasibility(_ctr_fn)
-        l_term = ops.maximum(self.lmbda, 0.0) * _ctr_infs
-        damp_term = self.damping * ops.square(_ctr_infs) / 2
+        fn_value = self.ctr_fn(inputs)
+        infeasibility = self.ctr_infeasibility(fn_value)
+        l_term = ops.maximum(self.lmbda, 0.0) * infeasibility
+        damp_term = self.damping * ops.square(infeasibility) / 2
         additional_loss = self.scale * (l_term + damp_term)
         return additional_loss
     
