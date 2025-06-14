@@ -7,5 +7,5 @@ build/
 logs/
 .ipynb_checkpoints/
 *.egg-info
-examples/*.yaml
+examples/
 **/_version.py
