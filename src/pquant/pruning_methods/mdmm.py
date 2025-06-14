@@ -1,3 +1,9 @@
+# -*- coding: utf-8 -*-
+# @Author: Arghya Ranjan Das
+# file: src/pquant/pruning_methods/mdmm.py
+# modified by:
+
+
 import keras
 from keras import ops
 import abc
@@ -12,7 +18,7 @@ def flip_gradient(weight):
 
 # Abstract base class for constraints
 @keras.utils.register_keras_serializable(name = "Constraint")
-class Contraint(keras.layers.Layer):
+class Constraint(keras.layers.Layer):
     def __init__(self, scale=1.0, damping=1.0, **kwargs):
         super().__init__(**kwargs)
         self.scale = self.add_weight(
@@ -34,7 +40,7 @@ class Contraint(keras.layers.Layer):
             trainable=True
         )
     
-    def call(self, weight):
+    def calculate_penalty(self, weight):
         """Calculates the penalty from a given infeasibility measure."""
         raw_infeasibility = self.get_infeasibility(weight)
         infeasibility = self.pipe_infeasibility(raw_infeasibility)
@@ -45,7 +51,7 @@ class Contraint(keras.layers.Layer):
         damp_term = self.damping * ops.square(infeasibility) / 2
         penalty = self.scale * (l_term + damp_term)
         
-        self.add_loss(penalty)
+        return penalty
 
     @abc.abstractmethod
     def get_infeasibility(self, weight):
@@ -62,8 +68,8 @@ class Contraint(keras.layers.Layer):
 #-------------------------------------------------------------------
 
 @keras.utils.register_keras_serializable(name = "EqualityConstraint")
-class EqualityConstraint(Contraint):
-    """Contraint for g(w) == target_value."""
+class EqualityConstraint(Constraint):
+    """Constraint for g(w) == target_value."""
     def __init__(self, metric_fn, target_value = 0.0,**kwargs):
         super().__init__(**kwargs)
         self.metric_fn = metric_fn
@@ -76,8 +82,8 @@ class EqualityConstraint(Contraint):
     
     
 @keras.utils.register_keras_serializable(name = "LessThanOrEqualConstraint")
-class LessThanOrEqualConstraint(Contraint):
-    """Contraint for g(w) <= target_value."""
+class LessThanOrEqualConstraint(Constraint):
+    """Constraint for g(w) <= target_value."""
     def __init__(self, metric_fn, target_value = 0.0, **kwargs):
         super().__init__(**kwargs)
         self.metric_fn = metric_fn
@@ -89,8 +95,8 @@ class LessThanOrEqualConstraint(Contraint):
         return ops.maximum(infeasibility, 0.0)
     
 @keras.utils.register_keras_serializable(name = "GreaterThanOrEqualConstraint")
-class GreaterThanOrEqualConstraint(Contraint):
-    """Contraint for g(w) >= target_value."""
+class GreaterThanOrEqualConstraint(Constraint):
+    """Constraint for g(w) >= target_value."""
     def __init__(self, metric_fn, target_value = 0.0, **kwargs):
         super().__init__(**kwargs)
         self.metric_fn = metric_fn
@@ -144,9 +150,11 @@ class StructuredSparsityMetric:
 class MDMM(keras.layers.Layer):
     def __init__(self, config, layer_type, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.config = config
+        self.config = config["pruning_parameters"]
         self.layer_type = layer_type
         self.constraint_layer = None
+        self.penalty_loss = self.add_weight(shape=(), initializer='zeros', trainable=False)
+
     
     def build(self, input_shape):
         metric_type = self.config.get("metric_type", "UnstructuredSparsity")
@@ -176,24 +184,46 @@ class MDMM(keras.layers.Layer):
         else:
             raise ValueError(f"Unknown constraint_type: {constraint_type}")
         
+        self.mask = ops.ones(input_shape)
         self.constraint_layer.build(input_shape)
         super().build(input_shape)
+        self.built = True
                     
     def call(self, weight):
-        if self.constraint_layer is None:
+        if not self.built:
             self.build(weight.shape)
-        if self.constraint_layer is not None:
-            infeasibility = self.constraint_layer.get_infeasibility(weight)
-        else:
-            raise RuntimeError("constraint_layer is not initialized after build().")
-        
-        self.constraint_layer(infeasibility)
-        return weight * self.get_hard_mask(weight)
-            
-            
+
+        penalty_loss_value = self.constraint_layer.calculate_penalty(weight)
+        self.penalty_loss.assign(penalty_loss_value)
+
+        return weight 
+    
     def get_hard_mask(self, weight):
         epsilon = self.config.get("epsilon", 1e-5)
         return ops.cast(ops.abs(weight) > epsilon, weight.dtype)
+    
+    def get_layer_sparsity(self, weight):
+        return ops.sum(self.get_mask(weight)) / ops.size(weight)
+
+    def calculate_additional_loss(self):
+        return self.penalty_loss
+
+    def pre_epoch_function(self, epoch, total_epochs):
+        pass
+
+    def pre_finetune_function(self):
+        pass
+
+    def post_epoch_function(self, epoch, total_epochs):
+        pass
+
+    def post_pre_train_function(self):
+        pass
+
+    def post_round_function(self):
+        pass
+    
+    
     
     
     

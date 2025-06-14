@@ -1,19 +1,20 @@
 pruning_parameters:
-  disable_pruning_for_layers:
-    -
-  enable_pruning: true
   pruning_method: mdmm
-  constraint: l1  # l1 or l2
-  target_sparsity: 0.5
+  enable_pruning: true
+  disable_pruning_for_layers:
+    - 
+  target_value: 0.8
+  constraint_type: "EqualityConstraint"
+  metric_type: "UnstructuredSparsity"
+  rf: 1
   epsilon: 1.0e-05
   scale: 1.0
   damping: 1.0
-  lr_multiplier: 1.0
 
 quantization_parameters:
+  enable_quantization: false
   default_integer_bits: 0.
   default_fractional_bits: 7.
-  enable_quantization: true
   hgq_gamma: 0.0003
   layer_specific: []
   use_high_granularity_quantization: false
@@ -21,25 +22,14 @@ quantization_parameters:
   use_symmetric_quantization: false
 
 training_parameters:
-  epochs: 100
+  epochs: 150
   fine_tuning_epochs: 0
   pretraining_epochs: 0
   pruning_first: false
   rewind: never
   rounds: 1
   save_weights_epoch: -1
-
-structured_pruning: 
-  enable_structured_pruning: false
-  structured_pruning_method: l1
-  structured_pruning_target_sparsity: 0.5
-  structured_pruning_layer_types:
-    - conv2d
-    - linear
-  structured_pruning_layers:
-    - conv2d
-    - linear
-batch_size: 64
+batch_size: 128
 cosine_tmax: 200
 gamma: 0.1
 l2_decay: 0.0001
@@ -47,8 +37,8 @@ label_smoothing: 0.0
 lr: 0.01
 lr_schedule: multistep
 milestones:
-- 50
 - 75
+- 120
 momentum: 0.9
 optimizer: sgd
 plot_frequency: 100
