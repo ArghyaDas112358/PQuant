@@ -1,3 +1,5 @@
+# file: /src/pquant/configs/config_mdmm.yaml
+
 pruning_parameters:
   pruning_method: mdmm
   enable_pruning: true
