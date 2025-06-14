@@ -12,8 +12,8 @@ dependencies:
   - keras>=3
   - pytorch=2.1
   - torchvision=0.16
-  - torchaudio=2.1
   - pip:
+      - torchaudio==2.1
       - tensorflow==2.15.*
       - quantizers>=1.1
       - git+https://github.com/calad0i/HGQ2.git
