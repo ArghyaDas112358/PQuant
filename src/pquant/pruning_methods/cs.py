@@ -1,6 +1,6 @@
 import keras
 from keras import ops
-from keras.api.initializers import Constant
+from keras.initializers import Constant
 
 
 class ContinuousSparsification(keras.layers.Layer):
