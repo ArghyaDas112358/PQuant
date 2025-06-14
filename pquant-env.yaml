@@ -1,15 +1,21 @@
 name: pquant-gpu-env
+
 channels:
   - conda-forge
+  - nvidia
   - defaults
+
 dependencies:
   - python=3.10
   - pip
   - ipykernel
-  - keras>=3
-  - tensorflow
   - pyyaml>=6.0.1
-  - quantizers>=1.1
-  - torch>=2.1
+  - keras>=3
+  - tensorflow-gpu>=2.15
+  - pytorch>=2.1
+  - torchvision
+  - torchaudio
+  - pytorch-cuda=12.1 
   - pip:
-    - git+https://github.com/calad0i/HGQ2.git
+      - quantizers>=1.1
+      - git+https://github.com/calad0i/HGQ2.git
