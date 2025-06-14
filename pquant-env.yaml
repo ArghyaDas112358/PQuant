@@ -9,11 +9,10 @@ dependencies:
   - pip
   - ipykernel
   - pyyaml>=6.0.1
-  - keras>=3
-  - pytorch=2.1
+  - pytorch=2.1         
   - torchvision=0.16
   - pip:
       - torchaudio==2.1
-      - tensorflow==2.15.*
+      - keras==3.*      
       - quantizers>=1.1
       - git+https://github.com/calad0i/HGQ2.git
