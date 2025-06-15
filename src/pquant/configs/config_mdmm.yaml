@@ -6,7 +6,7 @@ pruning_parameters:
   disable_pruning_for_layers:
     - 
   target_value: 0.8
-  constraint_type: "EqualityConstraint"
+  constraint_type: "Equality"
   metric_type: "UnstructuredSparsity"
   rf: 1
   epsilon: 1.0e-05
