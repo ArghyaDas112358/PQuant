@@ -24,13 +24,13 @@ class Constraint(keras.layers.Layer):
         self.scale = self.add_weight(
             name='scale',
             shape=(),
-            initializer=lambda s, d: ops.convert_to_tensor(scale, dtype=d),
+            initializer=lambda shape, dtype: ops.convert_to_tensor(scale, dtype=dtype),
             trainable=False
         )
         self.damping = self.add_weight(
             name='damping',
             shape=(),
-            initializer=lambda s, d: ops.convert_to_tensor(damping, dtype=d),
+            initializer=lambda shape, dtype: ops.convert_to_tensor(damping, dtype=dtype),
             trainable=False
         )
         self.lmbda = self.add_weight(
