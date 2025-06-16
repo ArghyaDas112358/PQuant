@@ -9,8 +9,8 @@ pruning_parameters:
   constraint_type: "Equality"
   metric_type: "UnstructuredSparsity"
   rf: 1
-  epsilon: 1.0e-05
-  scale: 1.0
+  epsilon: 1.0e-03
+  scale: 100000.0
   damping: 1.0
 
 quantization_parameters:

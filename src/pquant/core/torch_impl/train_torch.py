@@ -1,5 +1,6 @@
 import torch
-from tqdm.auto import tqdm  # Import the tqdm library
+from tqdm.auto import tqdm  
+import collections
 
 from pquant.core.torch_impl.compressed_layers_torch import (
     call_post_round_functions,
@@ -10,6 +11,14 @@ from pquant.core.torch_impl.compressed_layers_torch import (
     save_weights_functions,
 )
 
+class History:
+    def __init__(self):
+        self.history = collections.defaultdict(list)
+    
+    def on_epoch_end(self, epoch, logs=None):
+        logs = logs or {}
+        for k, v in logs.items():
+            self.history[k].append(v)
 
 def iterative_train_torch(model, config, train_func, valid_func, **kwargs):
     """

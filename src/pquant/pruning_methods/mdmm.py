@@ -5,14 +5,13 @@
 
 
 import keras
+keras.config.set_backend("torch")
 from keras import ops
 import abc
 
 @ops.custom_gradient
 def flip_gradient(weight):
-    def grad(*args, upstream=None):
-        if upstream is None:
-            (upstream,) = args
+    def grad(upstream):
         return -upstream
     return weight, grad
 
@@ -40,12 +39,13 @@ class Constraint(keras.layers.Layer):
             trainable=True
         )
     
-    def calculate_penalty(self, weight):
+    def call(self, weight):
         """Calculates the penalty from a given infeasibility measure."""
         raw_infeasibility = self.get_infeasibility(weight)
         infeasibility = self.pipe_infeasibility(raw_infeasibility)
         
         ascent_lmbda = flip_gradient(self.lmbda)
+        ascent_lmbda = ops.maximum(ascent_lmbda, 0.0)
         
         l_term = ascent_lmbda * infeasibility
         damp_term = self.damping * ops.square(infeasibility) / 2
@@ -79,7 +79,6 @@ class EqualityConstraint(Constraint):
         metric_value = self.metric_fn(weight)
         infeasibility = metric_value - self.target_value
         return ops.abs(infeasibility)
-    
     
 @keras.utils.register_keras_serializable(name = "LessThanOrEqualConstraint")
 class LessThanOrEqualConstraint(Constraint):
@@ -118,7 +117,7 @@ class UnstructuredSparsityMetric:
     def __call__(self, weight):
         num_weights = ops.cast(ops.size(weight), weight.dtype)
         zero_weights = ops.less_equal(ops.abs(weight), self.epsilon)
-        zero_count = ops.reduce_sum(ops.cast(zero_weights, weight.dtype))
+        zero_count = ops.sum(ops.cast(zero_weights, weight.dtype))
         sparsity_ratio = zero_count / num_weights
         return sparsity_ratio
 
@@ -141,7 +140,7 @@ class StructuredSparsityMetric:
         zero_groups = ops.less_equal(group_norms, self.epsilon)
         num_groups = ops.cast(ops.size(group_norms), "float32")
         
-        return ops.reduce_sum(ops.cast(zero_groups, "float32")) / num_groups
+        return ops.sum(ops.cast(zero_groups, "float32")) / num_groups
 
 #-------------------------------------------------------------------
 #                   MDMM Layer
@@ -153,8 +152,8 @@ class MDMM(keras.layers.Layer):
         self.config = config["pruning_parameters"]
         self.layer_type = layer_type
         self.constraint_layer = None
-        self.penalty_loss = self.add_weight(shape=(), initializer='zeros', trainable=False)
-
+        self.prenalty_loss = None
+        self.built = False
     
     def build(self, input_shape):
         metric_type = self.config.get("metric_type", "UnstructuredSparsity")
@@ -192,9 +191,9 @@ class MDMM(keras.layers.Layer):
     def call(self, weight):
         if not self.built:
             self.build(weight.shape)
-
-        penalty_loss_value = self.constraint_layer.calculate_penalty(weight)
-        self.penalty_loss.assign(penalty_loss_value)
+        
+        if self.training:
+            self.penalty_loss = self.constraint_layer(weight)
 
         return weight 
     
@@ -203,10 +202,10 @@ class MDMM(keras.layers.Layer):
         return ops.cast(ops.abs(weight) > epsilon, weight.dtype)
     
     def get_layer_sparsity(self, weight):
-        return ops.sum(self.get_mask(weight)) / ops.size(weight)
+        return ops.sum(self.get_hard_mask(weight)) / ops.size(weight)
 
     def calculate_additional_loss(self):
-        return self.penalty_loss
+        return self.penalty_loss if self.penalty_loss is not None else 0.0
 
     def pre_epoch_function(self, epoch, total_epochs):
         pass
