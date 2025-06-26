@@ -224,6 +224,7 @@ class MDMM(keras.layers.Layer):
         self.constraint_layer = None
         self.penalty_loss = None
         self.built = False
+        self.is_finetuning = False
     
     def build(self, input_shape):
         metric_type = self.config["pruning_parameters"].get("metric_type", "UnstructuredSparsity")
@@ -269,7 +270,11 @@ class MDMM(keras.layers.Layer):
         if not self.built:
             self.build(weight.shape)
         
-        self.penalty_loss = self.constraint_layer(weight)
+        if self.is_finetuning:
+            self.penalty_loss = 0.0
+            weight = weight * self.get_hard_mask(weight)
+        else:
+            self.penalty_loss = self.constraint_layer(weight)
 
         return weight 
     
@@ -295,7 +300,9 @@ class MDMM(keras.layers.Layer):
     def pre_finetune_function(self):
         # Freeze the wieghts 
         # Set lmbda(s) to zero
-        pass
+        self.is_finetuning = True
+        self.constraint_layer.lr_ = 0.0
+        self.constraint_layer.lmbda.assign(0.0)       
 
     def post_epoch_function(self, epoch, total_epochs):
         pass
