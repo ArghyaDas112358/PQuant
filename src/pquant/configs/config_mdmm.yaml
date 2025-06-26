@@ -21,6 +21,7 @@ quantization_parameters:
   default_integer_bits: 0.
   default_fractional_bits: 7.
   hgq_gamma: 0.0003
+  hgq_heterogeneous: True
   layer_specific: []
   use_high_granularity_quantization: false
   use_real_tanh: false
