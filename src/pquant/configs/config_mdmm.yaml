@@ -29,7 +29,7 @@ quantization_parameters:
 
 training_parameters:
   epochs: 300
-  fine_tuning_epochs: 0
+  fine_tuning_epochs: 30
   pretraining_epochs: 0
   pruning_first: false
   rewind: never
