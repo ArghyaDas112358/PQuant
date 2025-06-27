@@ -26,7 +26,6 @@ def iterative_train_torch(model, config, train_func, valid_func, **kwargs):
     """
     epoch = torch.tensor(0)  # Keeps track of all the epochs completed
     training_config = config["training_parameters"]
-    print("Ypp")
 
     # Pre-training loop 
     if training_config["pretraining_epochs"] > 0:
