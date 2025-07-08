@@ -87,8 +87,10 @@ class Constraint(keras.layers.Layer):
         return infeasibility
 
     def turn_off(self):
-        self.constraint_layer.lr_ = 0.0
-        self.scale.assign(0.0)   
+        if not self.use_grad_:
+            self.lr_ = 0.0
+        self.scale.assign(0.0)
+        self.lmbda.assign(0.0)
         
 #-------------------------------------------------------------------
 #               Generic Constraint Classes
@@ -302,10 +304,13 @@ class MDMM(keras.layers.Layer):
         pass
 
     def pre_finetune_function(self):
-        # Freeze the wieghts 
+        # Freeze the weights
         # Set lmbda(s) to zero
         self.is_finetuning = True
-        self.constraint_layer.turn_off()   
+        if hasattr(self.constraint_layer, 'module'):
+            self.constraint_layer.module.turn_off()
+        else:
+            self.constraint_layer.turn_off()
 
     def post_epoch_function(self, epoch, total_epochs):
         pass
@@ -315,7 +320,6 @@ class MDMM(keras.layers.Layer):
 
     def post_round_function(self):
         pass
-    
     
     
     
