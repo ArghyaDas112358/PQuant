@@ -86,6 +86,10 @@ class Constraint(keras.layers.Layer):
         Default is identity. Subclasses may override."""
         return infeasibility
 
+    def turn_off(self):
+        self.constraint_layer.lr_ = 0.0
+        self.scale.assign(0.0)   
+        
 #-------------------------------------------------------------------
 #               Generic Constraint Classes
 #-------------------------------------------------------------------
@@ -301,8 +305,7 @@ class MDMM(keras.layers.Layer):
         # Freeze the wieghts 
         # Set lmbda(s) to zero
         self.is_finetuning = True
-        self.constraint_layer.lr_ = 0.0
-        self.constraint_layer.lmbda.assign(0.0)       
+        self.constraint_layer.turn_off()   
 
     def post_epoch_function(self, epoch, total_epochs):
         pass
