@@ -5,7 +5,7 @@
 
 
 import keras
-keras.config.set_backend("torch")
+# keras.config.set_backend("torch")
 from keras import ops
 import abc
 
